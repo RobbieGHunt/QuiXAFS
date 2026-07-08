@@ -4,7 +4,7 @@ A suite of standalone, interactive Python tools for raw data exploration, batch 
 
 ---
 
-## 📋 System Requirements & Dependencies
+## System Requirements & Dependencies
 
 These tools are built for **Python 3.8+** and depend on standard scientific Python libraries and PyQt5 for user interfaces.
 
@@ -23,7 +23,7 @@ pip install -r requirements.txt
 
 ---
 
-## 🛠️ The Standalone Tools
+## Scripts
 
 ### 1. QuiXAFS (`QuiXAFS.py`)
 An interactive PyQt5 application for visualizing, calibrating, and performing multi-component fits of XAS/EXAFS datasets.
