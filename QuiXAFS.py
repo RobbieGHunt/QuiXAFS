@@ -526,7 +526,17 @@ class XASExplorerGUI(QMainWindow):
         # State variables
         self.current_idx = 0
         self.use_log_scale_1d = True
+        
+        # Load theme from config
         self.theme = "charcoal"
+        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "quixafs_defaults.json")
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                self.theme = config.get("theme", "charcoal")
+            except Exception:
+                pass
         
         # ROI defaults
         self.roi_start = 6800.0
@@ -620,6 +630,14 @@ class XASExplorerGUI(QMainWindow):
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
         
+        # Top-left layout for theme toggle button
+        top_bar = QHBoxLayout()
+        self.btn_toggle_theme = QPushButton("☀️ Light Mode")
+        self.btn_toggle_theme.clicked.connect(self.toggle_theme)
+        top_bar.addWidget(self.btn_toggle_theme)
+        top_bar.addStretch()
+        left_layout.addLayout(top_bar)
+        
         # Load & Theme Card
         load_card = QFrame()
         load_card_layout = QVBoxLayout(load_card)
@@ -633,16 +651,8 @@ class XASExplorerGUI(QMainWindow):
         btn_load.clicked.connect(self.on_load_clicked)
         btn_layout.addWidget(btn_load)
         
-        toggle_layout = QHBoxLayout()
-        toggle_layout.addWidget(QLabel("Theme Switch (Light / Dark):"))
-        self.switch_theme = QToggleSwitch()
-        self.switch_theme.setChecked(True)
-        self.switch_theme.toggled.connect(self.on_theme_switch_toggled)
-        toggle_layout.addWidget(self.switch_theme)
-        
         load_card_layout.addWidget(self.lbl_file_path)
         load_card_layout.addLayout(btn_layout)
-        load_card_layout.addLayout(toggle_layout)
         left_layout.addWidget(load_card)
         
         # Energy Sweeper Card
@@ -2348,13 +2358,21 @@ class XASExplorerGUI(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Export Error", f"Failed: {e}")
 
-    def on_theme_switch_toggled(self, checked):
-        self.theme = "charcoal" if checked else "light"
+    def toggle_theme(self):
+        self.theme = "light" if self.theme == "charcoal" else "charcoal"
         self.apply_theme()
+        # Save theme to config file
+        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "quixafs_defaults.json")
+        try:
+            with open(config_path, 'w') as f:
+                json.dump({"theme": self.theme}, f, indent=4)
+        except Exception:
+            pass
 
     def apply_theme(self):
         cfg = self.styles[self.theme]
         self.setStyleSheet(cfg["qss"])
+        self.btn_toggle_theme.setText("☀️ Light Mode" if self.theme == "charcoal" else "🌙 Dark Mode")
         self.mca_fig.patch.set_facecolor(cfg["fig_face"])
         self.xas_fig.patch.set_facecolor(cfg["fig_face"])
         self.k_fig.patch.set_facecolor(cfg["fig_face"])

@@ -19,6 +19,9 @@ import os
 import sys
 import glob
 import re
+import json
+
+RAW_EDF_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "raw_edf_defaults.json")
 import numpy as np
 
 from PyQt5.QtWidgets import (
@@ -112,7 +115,16 @@ class RawEDFExplorerGUI(QMainWindow):
         self.current_idx = 0
         self.use_log_scale_1d = True
         self.use_log_scale_2d = True
-        self.theme = "charcoal"  # "charcoal" or "light"
+        
+        # Load theme from config
+        self.theme = "charcoal"
+        if os.path.exists(RAW_EDF_CONFIG):
+            try:
+                with open(RAW_EDF_CONFIG, 'r') as f:
+                    config = json.load(f)
+                self.theme = config.get("theme", "charcoal")
+            except Exception:
+                pass
         
         # Stylesheet definitions
         self.styles = {
@@ -196,7 +208,15 @@ class RawEDFExplorerGUI(QMainWindow):
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Card 1: File Loading & Theme Toggle
+        # Top-left layout for theme toggle button
+        top_bar = QHBoxLayout()
+        self.btn_toggle_theme = QPushButton("☀️ Light Mode")
+        self.btn_toggle_theme.clicked.connect(self.toggle_theme)
+        top_bar.addWidget(self.btn_toggle_theme)
+        top_bar.addStretch()
+        left_layout.addLayout(top_bar)
+        
+        # Card 1: File Loading
         load_card = QFrame()
         load_card_layout = QVBoxLayout(load_card)
         
@@ -208,21 +228,7 @@ class RawEDFExplorerGUI(QMainWindow):
         btn_load = QPushButton("Load Raw EDF")
         btn_load.setObjectName("btn_accent")
         btn_load.clicked.connect(self.on_load_clicked)
-        
-        # Sliding Theme Switch row
-        theme_row = QHBoxLayout()
-        self.lbl_theme_status = QLabel("Dark Mode")
-        self.lbl_theme_status.setStyleSheet("font-weight: bold;")
-        
-        self.switch_theme = QToggleSwitch()
-        self.switch_theme.setChecked(True)  # ON = Charcoal/Dark
-        self.switch_theme.toggled.connect(self.on_theme_switch_toggled)
-        
-        theme_row.addWidget(self.lbl_theme_status)
-        theme_row.addWidget(self.switch_theme)
-        
         btn_layout.addWidget(btn_load)
-        btn_layout.addLayout(theme_row)
         
         load_card_layout.addWidget(self.lbl_file_path)
         load_card_layout.addLayout(btn_layout)
@@ -357,18 +363,20 @@ class RawEDFExplorerGUI(QMainWindow):
         # Apply initial theme
         self.apply_theme()
 
-    def on_theme_switch_toggled(self, checked):
-        if checked:
-            self.theme = "charcoal"
-            self.lbl_theme_status.setText("Dark Mode")
-        else:
-            self.theme = "light"
-            self.lbl_theme_status.setText("Light Mode")
+    def toggle_theme(self):
+        self.theme = "light" if self.theme == "charcoal" else "charcoal"
         self.apply_theme()
+        # Save theme to config file
+        try:
+            with open(RAW_EDF_CONFIG, 'w') as f:
+                json.dump({"theme": self.theme}, f, indent=4)
+        except Exception:
+            pass
 
     def apply_theme(self):
         theme_cfg = self.styles[self.theme]
         self.setStyleSheet(theme_cfg["qss"])
+        self.btn_toggle_theme.setText("☀️ Light Mode" if self.theme == "charcoal" else "🌙 Dark Mode")
         
         # Re-style Matplotlib figures
         self.mca_fig.patch.set_facecolor(theme_cfg["fig_face"])

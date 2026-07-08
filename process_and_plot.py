@@ -34,27 +34,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 
-CHARCOAL_QSS = """
-    QMainWindow { background-color: #18181b; }
-    QWidget { background-color: #18181b; color: #f4f4f5; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; }
-    QFrame { background-color: #27272a; border: 1px solid #3f3f46; border-radius: 6px; }
-    QLabel { border: none; background-color: transparent; }
-    QLineEdit { background-color: #18181b; border: 1px solid #3f3f46; border-radius: 4px; padding: 6px; color: #f4f4f5; }
-    QListWidget { background-color: #18181b; border: 1px solid #3f3f46; border-radius: 4px; color: #f4f4f5; padding: 4px; }
-    QListWidget::item { padding: 4px; }
-    QListWidget::item:hover { background-color: #3f3f46; border-radius: 4px; }
-    QListWidget::item:selected { background-color: #6366f1; color: #ffffff; border-radius: 4px; }
-    QPushButton { background-color: #3f3f46; color: #f4f4f5; border: 1px solid #52525b; border-radius: 4px; padding: 6px 12px; font-weight: bold; }
-    QPushButton:hover { background-color: #52525b; }
-    QPushButton:pressed { background-color: #6366f1; }
-    QPushButton#btn_accent { background-color: #6366f1; border: 1px solid #4f46e5; }
-    QPushButton#btn_accent:hover { background-color: #4f46e5; }
-    QPushButton#btn_accent:pressed { background-color: #4338ca; }
-    QProgressBar { border: 1px solid #3f3f46; border-radius: 4px; text-align: center; background-color: #18181b; color: #ffffff; font-weight: bold; }
-    QProgressBar::chunk { background-color: #6366f1; border-radius: 3px; }
-    QSpinBox { background-color: #18181b; border: 1px solid #3f3f46; border-radius: 4px; padding: 4px; color: #f4f4f5; }
-    QTextEdit { background-color: #18181b; border: 1px solid #3f3f46; border-radius: 4px; color: #f4f4f5; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; }
-"""
+
 
 class ProcessingWorker(QThread):
     progress = pyqtSignal(int)
@@ -239,13 +219,73 @@ class MplCanvas(FigureCanvas):
         self.axes.text(0.5, 0.5, "No data processed yet.\nSelect directories and click 'Process & Save' to plot.",
                        color='#a1a1aa', fontsize=12, ha='center', va='center', transform=self.axes.transAxes)
 
-class ZAPProcessingGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("BM28 XMaS - ZAP Data Processing")
         self.setGeometry(100, 100, 1200, 750)
-        self.setStyleSheet(CHARCOAL_QSS)
         
+        self.styles = {
+            "charcoal": {
+                "qss": """
+                    QMainWindow { background-color: #18181b; }
+                    QWidget { background-color: #18181b; color: #f4f4f5; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; }
+                    QFrame { background-color: #27272a; border: 1px solid #3f3f46; border-radius: 6px; }
+                    QLabel { border: none; background-color: transparent; }
+                    QLineEdit { background-color: #18181b; border: 1px solid #3f3f46; border-radius: 4px; padding: 6px; color: #f4f4f5; }
+                    QListWidget { background-color: #18181b; border: 1px solid #3f3f46; border-radius: 4px; color: #f4f4f5; padding: 4px; }
+                    QListWidget::item { padding: 4px; }
+                    QListWidget::item:hover { background-color: #3f3f46; border-radius: 4px; }
+                    QListWidget::item:selected { background-color: #6366f1; color: #ffffff; border-radius: 4px; }
+                    QPushButton { background-color: #3f3f46; color: #f4f4f5; border: 1px solid #52525b; border-radius: 4px; padding: 6px 12px; font-weight: bold; }
+                    QPushButton:hover { background-color: #52525b; }
+                    QPushButton:pressed { background-color: #6366f1; }
+                    QPushButton#btn_accent { background-color: #6366f1; border: 1px solid #4f46e5; }
+                    QPushButton#btn_accent:hover { background-color: #4f46e5; }
+                    QPushButton#btn_accent:pressed { background-color: #4338ca; }
+                    QProgressBar { border: 1px solid #3f3f46; border-radius: 4px; text-align: center; background-color: #18181b; color: #ffffff; font-weight: bold; }
+                    QProgressBar::chunk { background-color: #6366f1; border-radius: 3px; }
+                    QSpinBox { background-color: #18181b; border: 1px solid #3f3f46; border-radius: 4px; padding: 4px; color: #f4f4f5; }
+                    QTextEdit { background-color: #18181b; border: 1px solid #3f3f46; border-radius: 4px; color: #f4f4f5; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; }
+                """,
+                "fig_face": "#27272a",
+                "ax_face": "#18181b",
+                "text": "#f4f4f5",
+                "grid": "#3f3f46",
+                "spine": "#3f3f46",
+                "line_color": "white"
+            },
+            "light": {
+                "qss": """
+                    QMainWindow { background-color: #f4f4f5; }
+                    QWidget { background-color: #f4f4f5; color: #18181b; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; }
+                    QFrame { background-color: #ffffff; border: 1px solid #e4e4e7; border-radius: 6px; }
+                    QLabel { border: none; background-color: transparent; }
+                    QLineEdit { background-color: #ffffff; border: 1px solid #d4d4d8; border-radius: 4px; padding: 6px; color: #18181b; }
+                    QListWidget { background-color: #ffffff; border: 1px solid #d4d4d8; border-radius: 4px; color: #18181b; padding: 4px; }
+                    QListWidget::item { padding: 4px; }
+                    QListWidget::item:hover { background-color: #e4e4e7; border-radius: 4px; }
+                    QListWidget::item:selected { background-color: #3b82f6; color: #ffffff; border-radius: 4px; }
+                    QPushButton { background-color: #e4e4e7; color: #18181b; border: 1px solid #d4d4d8; border-radius: 4px; padding: 6px 12px; font-weight: bold; }
+                    QPushButton:hover { background-color: #d4d4d8; }
+                    QPushButton:pressed { background-color: #3b82f6; color: white; }
+                    QPushButton#btn_accent { background-color: #3b82f6; border: 1px solid #2563eb; color: white; }
+                    QPushButton#btn_accent:hover { background-color: #2563eb; }
+                    QPushButton#btn_accent:pressed { background-color: #1d4ed8; }
+                    QProgressBar { border: 1px solid #d4d4d8; border-radius: 4px; text-align: center; background-color: #e4e4e7; color: #18181b; font-weight: bold; }
+                    QProgressBar::chunk { background-color: #3b82f6; border-radius: 3px; }
+                    QSpinBox { background-color: #ffffff; border: 1px solid #d4d4d8; border-radius: 4px; padding: 4px; color: #18181b; }
+                    QTextEdit { background-color: #ffffff; border: 1px solid #d4d4d8; border-radius: 4px; color: #18181b; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; }
+                """,
+                "fig_face": "#ffffff",
+                "ax_face": "#f4f4f5",
+                "text": "#18181b",
+                "grid": "#d4d4d8",
+                "spine": "#d4d4d8",
+                "line_color": "black"
+            }
+        }
+        
+        self.theme = "charcoal"
         self.matching_scans = {}
         self.colorbar = None
         self.worker = None
@@ -270,6 +310,14 @@ class ZAPProcessingGUI(QMainWindow):
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(10)
+        
+        # Top-left layout for theme toggle button
+        top_bar = QHBoxLayout()
+        self.btn_toggle_theme = QPushButton("☀️ Light Mode")
+        self.btn_toggle_theme.clicked.connect(self.toggle_theme)
+        top_bar.addWidget(self.btn_toggle_theme)
+        top_bar.addStretch()
+        left_layout.addLayout(top_bar)
         
         # Header
         lbl_title = QLabel("ZAP Data Processing Interface")
@@ -417,6 +465,7 @@ class ZAPProcessingGUI(QMainWindow):
         self.txt_save_dir.setText("")
         
         # Load from config file if exists
+        theme_val = "charcoal"
         if os.path.exists(CONFIG_FILE):
             try:
                 with open(CONFIG_FILE, 'r') as f:
@@ -425,9 +474,12 @@ class ZAPProcessingGUI(QMainWindow):
                 self.txt_csv_dir.setText(config.get("csv_dir", ""))
                 self.txt_save_dir.setText(config.get("save_dir", ""))
                 self.txt_basename.setText(config.get("basename", "averaged_zap"))
+                theme_val = config.get("theme", "charcoal")
             except Exception:
                 pass
                 
+        self.theme = theme_val
+        self.apply_theme()
         self.scan_directories()
         
     def save_defaults_action(self):
@@ -435,7 +487,8 @@ class ZAPProcessingGUI(QMainWindow):
             "zap_dir": self.txt_zap_dir.text().strip(),
             "csv_dir": self.txt_csv_dir.text().strip(),
             "save_dir": self.txt_save_dir.text().strip(),
-            "basename": self.txt_basename.text().strip()
+            "basename": self.txt_basename.text().strip(),
+            "theme": self.theme
         }
         try:
             with open(CONFIG_FILE, 'w') as f:
@@ -443,6 +496,40 @@ class ZAPProcessingGUI(QMainWindow):
             QMessageBox.information(self, "Defaults Saved", "Current paths and base name have been saved as your defaults!")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save defaults:\n{str(e)}")
+
+    def toggle_theme(self):
+        self.theme = "light" if self.theme == "charcoal" else "charcoal"
+        self.apply_theme()
+        # Save theme to defaults
+        config = {}
+        if os.path.exists(CONFIG_FILE):
+            try:
+                with open(CONFIG_FILE, 'r') as f:
+                    config = json.load(f)
+            except Exception:
+                pass
+        config["theme"] = self.theme
+        try:
+            with open(CONFIG_FILE, 'w') as f:
+                json.dump(config, f, indent=4)
+        except Exception:
+            pass
+
+    def apply_theme(self):
+        theme_cfg = self.styles[self.theme]
+        self.setStyleSheet(theme_cfg["qss"])
+        self.btn_toggle_theme.setText("☀️ Light Mode" if self.theme == "charcoal" else "🌙 Dark Mode")
+        
+        # Style embedded canvas
+        self.canvas.figure.set_facecolor(theme_cfg["fig_face"])
+        self.canvas.axes.set_facecolor(theme_cfg["ax_face"])
+        self.canvas.axes.tick_params(colors=theme_cfg["text"])
+        self.canvas.axes.xaxis.label.set_color(theme_cfg["text"])
+        self.canvas.axes.yaxis.label.set_color(theme_cfg["text"])
+        for spine in self.canvas.axes.spines.values():
+            spine.set_color(theme_cfg["spine"])
+            
+        self.canvas.draw()
 
     def clear_defaults_action(self):
         if os.path.exists(CONFIG_FILE):
@@ -644,12 +731,13 @@ class ZAPProcessingGUI(QMainWindow):
     def plot_heatmap(self, average_data, average_energy, mca_energies, save_dir, basename):
         self.canvas.axes.clear()
         
-        # Set dark colors
-        self.canvas.axes.tick_params(colors='#f4f4f5', labelsize=9)
-        self.canvas.axes.xaxis.label.set_color('#f4f4f5')
-        self.canvas.axes.yaxis.label.set_color('#f4f4f5')
+        # Set theme-dependent colors
+        theme_cfg = self.styles[self.theme]
+        self.canvas.axes.tick_params(colors=theme_cfg["text"], labelsize=9)
+        self.canvas.axes.xaxis.label.set_color(theme_cfg["text"])
+        self.canvas.axes.yaxis.label.set_color(theme_cfg["text"])
         for spine in self.canvas.axes.spines.values():
-            spine.set_color('#3f3f46')
+            spine.set_color(theme_cfg["spine"])
             
         # Crop the emission energy to the region of interest (2000 eV to 8500 eV)
         idx_crop = np.where((mca_energies >= 2000) & (mca_energies <= 8500))[0]
@@ -685,18 +773,18 @@ class ZAPProcessingGUI(QMainWindow):
         }
         
         for label, val in ref_lines.items():
-            self.canvas.axes.axvline(val, color='white', linestyle='--', alpha=0.5, linewidth=1.2)
-            self.canvas.axes.text(val + 50, energy_max - 50, label, color='white', rotation=90, 
+            self.canvas.axes.axvline(val, color=theme_cfg["line_color"], linestyle='--', alpha=0.5, linewidth=1.2)
+            self.canvas.axes.text(val + 50, energy_max - 50, label, color=theme_cfg["text"], rotation=90, 
                                  verticalalignment='top', fontsize=8, fontweight='bold',
-                                 bbox=dict(facecolor='#18181b', alpha=0.7, edgecolor='none', pad=2))
+                                 bbox=dict(facecolor=theme_cfg["ax_face"], alpha=0.7, edgecolor='none', pad=2))
             
         # Draw elastic diagonal line
-        self.canvas.axes.plot([energy_min, energy_max], [energy_min, energy_max], 'w--', alpha=0.5, linewidth=1.2, label='Elastic Scatter (Diagonal)')
+        self.canvas.axes.plot([energy_min, energy_max], [energy_min, energy_max], color=theme_cfg["line_color"], linestyle='--', alpha=0.5, linewidth=1.2, label='Elastic Scatter (Diagonal)')
         
         # Add colorbar
         self.colorbar = self.canvas.figure.colorbar(im, ax=self.canvas.axes, pad=0.02)
-        self.colorbar.ax.yaxis.set_tick_params(colors='#f4f4f5', labelsize=9)
-        self.colorbar.set_label('Log10 Normalized Intensity', color='#f4f4f5', fontsize=10)
+        self.colorbar.ax.yaxis.set_tick_params(colors=theme_cfg["text"], labelsize=9)
+        self.colorbar.set_label('Log10 Normalized Intensity', color=theme_cfg["text"], fontsize=10)
         
         self.canvas.axes.set_xlabel('Emission Energy (eV)', fontsize=10)
         self.canvas.axes.set_ylabel('Incident Photon Energy (eV)', fontsize=10)
