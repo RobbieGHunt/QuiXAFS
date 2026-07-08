@@ -25,22 +25,19 @@ pip install -r requirements.txt
 
 ## Scripts
 
-### 1. QuiXAFS (`QuiXAFS.py`)
-An interactive PyQt5 application for visualizing, calibrating, and performing multi-component fits of XAS/EXAFS datasets.
+### 1. Raw EDF Explorer (`raw_edf_explorer.py`)
+An interactive explorer interface to inspect raw ESRF Data Format (EDF) files. Displays the 2D map and allows for selecting an individual spectrum.
 
 - **Features**:
-  - **Premium UI**: Dark mode Charcoal styling.
-  - **Dynamic File Format Support**: Loads standard 2D `.npy` files or single compressed `.npz` dataset packages containing average intensity, standard deviations, and energy axes.
-  - **Dynamic Index Mapping**: Naturally links incident energy sweep sliders to the raw EDF spectrum orientation.
-  - **Integrated ROI Integration Tool**: Draggable boundaries on the 1D spectrum plot to map specific emission lines.
-  - **Emission Line Calibration**: Maps MCA channels to emission energy (eV) using IUPAC database lines.
-  - **Advanced Fitting**: Solves multi-component models (Tb, Co, Fe, Cr) with background scatter corrections.
-- **Dependency Files**: Requires [emission_lines.json](emission_lines.json) in the same directory to load reference database lines.
+  - Open any raw `.edf` binary file containing 2D MCA datasets.
+  - Scroll through incident energy slices and plot individual MCA spectra.
+  - Select regions of interest (ROI) and inspect raw detector counts.
+- **Dependency Files**: Requires [data_loader.py](data_loader.py) in the same directory for EDF parsing.
 - **Run**:
   ```bash
-  python QuiXAFS.py
+  python raw_edf_explorer.py
   ```
-
+  Or run from any python IDE (e.g. Spyder).
 ---
 
 ### 2. ZAP Processor (`process_and_plot.py`)
@@ -57,18 +54,27 @@ A PyQt5 GUI utility to batch load, align, normalize, and average raw ZAP scans (
   ```bash
   python process_and_plot.py
   ```
+  Or run from any python IDE (e.g. Spyder).
 
 ---
 
-### 3. Raw EDF Explorer (`raw_edf_explorer.py`)
-An interactive explorer interface to inspect raw ESRF Data Format (EDF) files.
+
+### 3. QuiXAFS (`QuiXAFS.py`)
+An interactive PyQt5 application for visualizing, calibrating, and performing multi-component fits of XAS/EXAFS datasets.
 
 - **Features**:
-  - Open any raw `.edf` binary file containing 2D MCA datasets.
-  - Scroll through incident energy slices and plot individual MCA spectra.
-  - Select regions of interest (ROI) and inspect raw detector counts.
-- **Dependency Files**: Requires [data_loader.py](data_loader.py) in the same directory for EDF parsing.
+  - **Dynamic File Format Support**: Loads standard 2D `.npy` files or single compressed `.npz` dataset packages containing average intensity, standard deviations, and energy axes.
+  - **Integrated ROI Integration Tool**: Draggable boundaries on the 1D spectrum plot to map specific emission lines.
+  - **Element Selection**: Select from a periodic table which elements to include and model to compare against (elemental data pulled from https://xraypy.github.io/XrayDB/).
+  - **Emission Line Calibration**: Maps MCA channels to emission energy (eV) using IUPAC database lines.
+  - **Advanced Fitting**: Solves multi-component models (Tb, Co, Fe, Cr) with background scatter corrections.
+- **Dependency Files**: Requires [emission_lines.json](emission_lines.json) in the same directory to load reference database lines.
 - **Run**:
   ```bash
-  python raw_edf_explorer.py
+  python QuiXAFS.py
   ```
+  Or run from any python IDE (e.g. Spyder).
+
+---
+
+
