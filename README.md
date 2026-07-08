@@ -23,13 +23,21 @@ pip install -r requirements.txt
 
 ---
 
+## 🌓 Persistent Dark / Light Themes
+
+All three applications feature a theme toggle button in the **top-left** of the interface:
+- **Toggle Theme**: Instantly switch between the default dark (Charcoal) theme and a light theme. The Matplotlib figures, axes, reference lines, and label colors adjust dynamically.
+- **Preference Persistence**: The active theme selection is saved locally next to the script in a JSON configuration file (`quixafs_defaults.json`, `zap_defaults.json`, or `raw_edf_defaults.json`). The tool automatically loads and applies your preferred theme the next time you launch the application.
+
+---
+
 ## 🛠️ The Standalone Tools
 
 ### 1. QuiXAFS (`QuiXAFS.py`)
 An interactive PyQt5 application for visualizing, calibrating, and performing multi-component fits of XAS/EXAFS datasets.
 
 - **Features**:
-  - **Premium UI**: Dark mode Charcoal styling.
+  - **Premium UI**: Integrated top-left theme switch button.
   - **Dynamic File Format Support**: Loads standard 2D `.npy` files or single compressed `.npz` dataset packages containing average intensity, standard deviations, and energy axes.
   - **Dynamic Index Mapping**: Naturally links incident energy sweep sliders to the raw EDF spectrum orientation.
   - **Integrated ROI Integration Tool**: Draggable boundaries on the 1D spectrum plot to map specific emission lines.
