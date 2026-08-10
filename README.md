@@ -72,6 +72,7 @@ An interactive PyQt5 application for visualizing, calibrating, and performing mu
 
 - **Features**:
   - **Dynamic File Format Support**: Loads standard 2D `.npy` files or single compressed `.npz` dataset packages containing average intensity, standard deviations, and energy axes.
+  - **Example Data**: Includes an example NumPy dataset in [`example_data/`](example_data/) (`averaged_normalized_zap.npy` with `zap_energy_axis.npy`, `mca_energy_axis.npy`, and `standard_error_zap.npy`).
   - **Integrated ROI Integration Tool**: Draggable boundaries on the 1D spectrum plot to map specific emission lines.
   - **Element Selection**: Select from a periodic table which elements to include and model to compare against (elemental data pulled from https://xraypy.github.io/XrayDB/).
   - **Emission Line Calibration**: Maps MCA channels to emission energy (eV) using IUPAC database lines.
@@ -84,3 +85,24 @@ An interactive PyQt5 application for visualizing, calibrating, and performing mu
   Or run from any python IDE (e.g. Spyder).
 
 ---
+
+## 📊 Example Dataset
+
+An example pre-processed NumPy dataset is provided in the [`example_data/`](example_data/) directory:
+
+> [!IMPORTANT]
+> **This example dataset is for the EXAFS GUI script (`QuiXAFS.py`) ONLY.**
+> The Raw EDF Explorer (`raw_edf_explorer.py`) and ZAP Processor (`process_and_plot.py`) process raw ESRF `.edf` binary detector files and SPEC metadata CSV files, whereas `QuiXAFS.py` operates on pre-processed/normalized 2D NumPy array packages.
+
+### Files in `example_data/`:
+- **`averaged_normalized_zap.npy`**: 2D array of averaged, normalized ZAP fluorescence spectra (incident energy points × MCA channels).
+- **`zap_energy_axis.npy`**: 1D array of incident photon energies (eV).
+- **`mca_energy_axis.npy`**: 1D array of calibrated MCA detector energies (eV).
+- **`standard_error_zap.npy`**: 2D array of standard errors across processed scans.
+
+### Loading the Example Dataset in `QuiXAFS.py`:
+1. Launch `QuiXAFS.py`.
+2. Click **"Load 2D NumPy"** in the top-left panel.
+3. Select `example_data/averaged_normalized_zap.npy`.
+4. The GUI will automatically locate the matching energy axes (`zap_energy_axis.npy`, `mca_energy_axis.npy`) and error array (`standard_error_zap.npy`) in the same directory.
+
