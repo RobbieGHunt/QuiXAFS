@@ -21,7 +21,12 @@ import glob
 import re
 import json
 
-RAW_EDF_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "raw_edf_defaults.json")
+RAW_EDF_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config", "raw_edf_defaults.json")
+if not os.path.exists(RAW_EDF_CONFIG):
+    legacy_config = os.path.join(os.path.dirname(os.path.abspath(__file__)), "raw_edf_defaults.json")
+    if os.path.exists(legacy_config):
+        RAW_EDF_CONFIG = legacy_config
+
 import numpy as np
 
 from PyQt5.QtWidgets import (
@@ -36,7 +41,10 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 
-from data_loader import read_edf
+try:
+    from utils.data_loader import read_edf
+except ImportError:
+    from data_loader import read_edf
 
 class QToggleSwitch(QPushButton):
     """
@@ -368,6 +376,7 @@ class RawEDFExplorerGUI(QMainWindow):
         self.apply_theme()
         # Save theme to config file
         try:
+            os.makedirs(os.path.dirname(RAW_EDF_CONFIG), exist_ok=True)
             with open(RAW_EDF_CONFIG, 'w') as f:
                 json.dump({"theme": self.theme}, f, indent=4)
         except Exception:

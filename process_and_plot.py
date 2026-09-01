@@ -19,7 +19,12 @@ import re
 import glob
 import json
 
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zap_defaults.json")
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config", "zap_defaults.json")
+if not os.path.exists(CONFIG_FILE):
+    legacy_config = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zap_defaults.json")
+    if os.path.exists(legacy_config):
+        CONFIG_FILE = legacy_config
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -33,8 +38,10 @@ from PyQt5.QtWidgets import (
     QProgressBar, QTextEdit, QSplitter, QFrame, QMessageBox, QGridLayout, QSpinBox
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
-
-
+try:
+    from utils.data_loader import get_matching_scans, load_scan_dataframe, read_edf, SpecFile
+except ImportError:
+    from data_loader import get_matching_scans, load_scan_dataframe, read_edf, SpecFile
 
 class ProcessingWorker(QThread):
     progress = pyqtSignal(int)
@@ -62,37 +69,32 @@ class ProcessingWorker(QThread):
                     self.finished.emit({"success": False, "error": "Cancelled"})
                     return
                     
-                csv_path = self.matching_scans[s_num]['csv']
-                edf_path = self.matching_scans[s_num]['edf']
+                scan_info = self.matching_scans[s_num]
+                edf_path = scan_info.get('edf_path') or scan_info.get('edf')
                 
                 self.log_signal.emit(f"Processing scan {s_num}...")
                 
                 try:
-                    # Load CSV
-                    if not os.path.exists(csv_path):
-                        self.log_signal.emit(f"  Warning: CSV file for scan {s_num} not found. Skipping.")
+                    # Load DataFrame directly from in-memory SPEC or CSV
+                    df = load_scan_dataframe(scan_info)
+                    if df is None or df.empty:
+                        self.log_signal.emit(f"  Warning: No data for scan {s_num}. Skipping.")
                         continue
-                    df = pd.read_csv(csv_path)
-                    if 'zap_Iref_p' not in df.columns or 'zap_energy' not in df.columns:
-                        self.log_signal.emit(f"  Warning: CSV for scan {s_num} lacks required columns. Skipping.")
+                        
+                    iref_col = 'zap_Iref_p' if 'zap_Iref_p' in df.columns else ('Iref' if 'Iref' in df.columns else None)
+                    if iref_col is None or 'zap_energy' not in df.columns:
+                        self.log_signal.emit(f"  Warning: Data for scan {s_num} lacks required columns ('zap_Iref_p'/'Iref', 'zap_energy'). Skipping.")
                         continue
-                    iref = df['zap_Iref_p'].values
+                    iref = df[iref_col].values
                     energy = df['zap_energy'].values
                     num_points = len(iref)
                     
                     # Load EDF
-                    if not os.path.exists(edf_path):
+                    if not edf_path or not os.path.exists(edf_path):
                         self.log_signal.emit(f"  Warning: EDF file for scan {s_num} not found. Skipping.")
                         continue
                         
-                    with open(edf_path, 'rb') as f:
-                        f.seek(1024)  # Skip 1024-byte ASCII header
-                        edf_raw = np.fromfile(f, dtype='<i4')
-                        
-                    # Reshape. Assume 4096 channels.
-                    dim_1 = 4096
-                    dim_2 = len(edf_raw) // dim_1
-                    edf_data = edf_raw[:dim_2 * dim_1].reshape((dim_2, dim_1))
+                    _, edf_data = read_edf(edf_path)
                     
                     # Align shapes to the minimum common length to handle missing/corrupted rows
                     min_points = min(edf_data.shape[0], num_points)
@@ -342,7 +344,7 @@ class ZAPProcessingGUI(QMainWindow):
         dir_layout.addWidget(self.txt_zap_dir, 0, 1)
         dir_layout.addWidget(btn_zap, 0, 2)
         
-        dir_layout.addWidget(QLabel("CSV Directory:"), 1, 0)
+        dir_layout.addWidget(QLabel("SPEC File / CSV Dir:"), 1, 0)
         self.txt_csv_dir = QLineEdit()
         self.txt_csv_dir.editingFinished.connect(self.scan_directories)
         btn_csv = QPushButton("Browse...")
@@ -495,6 +497,7 @@ class ZAPProcessingGUI(QMainWindow):
             "theme": self.theme
         }
         try:
+            os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(config, f, indent=4)
             QMessageBox.information(self, "Defaults Saved", "Current paths and base name have been saved as your defaults!")
@@ -514,6 +517,7 @@ class ZAPProcessingGUI(QMainWindow):
                 pass
         config["theme"] = self.theme
         try:
+            os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(config, f, indent=4)
         except Exception:
@@ -560,9 +564,19 @@ class ZAPProcessingGUI(QMainWindow):
             
     def browse_csv_dir(self):
         start_dir = self.txt_csv_dir.text().strip()
-        if not start_dir:
+        if not start_dir or not os.path.exists(start_dir):
             start_dir = os.getcwd()
-        path = QFileDialog.getExistingDirectory(self, "Select CSV Directory", start_dir)
+        elif os.path.isfile(start_dir):
+            start_dir = os.path.dirname(start_dir)
+            
+        path, _ = QFileDialog.getOpenFileName(
+            self, 
+            "Select SPEC File (or Cancel to select CSV Directory)", 
+            start_dir, 
+            "SPEC / CSV Files (*.01 *.spec *.dat *.txt *.csv);;SPEC Files (*.01 *.spec *.dat *.txt);;CSV Files (*.csv);;All Files (*.*)"
+        )
+        if not path:
+            path = QFileDialog.getExistingDirectory(self, "Select CSV / SPEC Directory", start_dir)
         if path:
             self.txt_csv_dir.setText(os.path.normpath(path))
             self.scan_directories()
@@ -577,33 +591,18 @@ class ZAPProcessingGUI(QMainWindow):
             
     def scan_directories(self):
         zap_dir = self.txt_zap_dir.text().strip()
-        csv_dir = self.txt_csv_dir.text().strip()
+        spec_or_csv = self.txt_csv_dir.text().strip()
         
         self.list_scans.clear()
         self.lbl_scan_status.setText("Matched Scans: 0")
         self.matching_scans = {}
         
-        if not zap_dir or not csv_dir or not os.path.isdir(zap_dir) or not os.path.isdir(csv_dir):
+        if not zap_dir or not spec_or_csv:
+            return
+        if not os.path.isdir(zap_dir) or not (os.path.isfile(spec_or_csv) or os.path.isdir(spec_or_csv)):
             return
             
-        csv_files = glob.glob(os.path.join(csv_dir, "*.csv"))
-        edf_files = glob.glob(os.path.join(zap_dir, "*.edf"))
-        
-        scan_map = {}
-        for f in csv_files:
-            m = re.search(r"scan_(\d+)_", os.path.basename(f))
-            if m:
-                scan_num = int(m.group(1))
-                scan_map[scan_num] = {'csv': f, 'edf': None}
-                
-        for f in edf_files:
-            m = re.search(r"xia\d+_(\d+)_0000_0000\.edf", os.path.basename(f))
-            if m:
-                scan_num = int(m.group(1))
-                if scan_num in scan_map:
-                    scan_map[scan_num]['edf'] = f
-                    
-        self.matching_scans = {k: v for k, v in scan_map.items() if v['edf'] is not None}
+        self.matching_scans = get_matching_scans(spec_or_csv, zap_dir)
         scan_numbers = sorted(list(self.matching_scans.keys()))
         
         if not scan_numbers:
@@ -612,7 +611,8 @@ class ZAPProcessingGUI(QMainWindow):
             self.spin_finish.setValue(0)
             return
             
-        self.lbl_scan_status.setText(f"Matched Scans: {len(scan_numbers)}")
+        source_label = "SPEC File" if os.path.isfile(spec_or_csv) else "CSV Directory"
+        self.lbl_scan_status.setText(f"Matched Scans: {len(scan_numbers)} ({source_label})")
         
         min_scan = scan_numbers[0]
         max_scan = scan_numbers[-1]
@@ -626,7 +626,9 @@ class ZAPProcessingGUI(QMainWindow):
         self.spin_finish.blockSignals(False)
         
         for s_num in scan_numbers:
-            item = QListWidgetItem(f"Scan {s_num}")
+            cmd = self.matching_scans[s_num].get('command', '')
+            label = f"Scan {s_num:03d} - {cmd}" if cmd else f"Scan {s_num:03d}"
+            item = QListWidgetItem(label)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Checked)
             item.setData(Qt.UserRole, s_num)

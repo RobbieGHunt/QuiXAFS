@@ -1,4 +1,4 @@
-﻿# Figures and Presentation Assets
+# Figures and Presentation Assets
 figures/
 figures/*
 
@@ -13,6 +13,8 @@ dist/
 *.spec
 
 # Application runtime state and local defaults
+config/
+config/*.json
 *_defaults.json
 app_defaults.json
 

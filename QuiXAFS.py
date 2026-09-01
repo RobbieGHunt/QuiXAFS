@@ -524,7 +524,9 @@ class XASExplorerGUI(QMainWindow):
         
         # Load local database
         self.db = {}
-        db_path = os.path.join(os.path.dirname(__file__), "emission_lines.json")
+        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources", "emission_lines.json")
+        if not os.path.exists(db_path):
+            db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "emission_lines.json")
         if os.path.exists(db_path):
             try:
                 with open(db_path, "r") as f:
@@ -577,7 +579,9 @@ class XASExplorerGUI(QMainWindow):
         
         # Load theme from config
         self.theme = "charcoal"
-        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "quixafs_defaults.json")
+        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config", "quixafs_defaults.json")
+        if not os.path.exists(config_path):
+            config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "quixafs_defaults.json")
         if os.path.exists(config_path):
             try:
                 with open(config_path, 'r') as f:
@@ -2544,7 +2548,9 @@ class XASExplorerGUI(QMainWindow):
         self.theme = "light" if self.theme == "charcoal" else "charcoal"
         self.apply_theme()
         # Save theme to config file
-        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "quixafs_defaults.json")
+        config_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config")
+        os.makedirs(config_dir, exist_ok=True)
+        config_path = os.path.join(config_dir, "quixafs_defaults.json")
         try:
             with open(config_path, 'w') as f:
                 json.dump({"theme": self.theme}, f, indent=4)
