@@ -57,57 +57,52 @@ pip install -r requirements.txt
 
 ---
 
-## 🚀 GUI Applications
+## GUI Applications
 
 ### 1. Raw EDF Explorer (`raw_edf_explorer.py`)
 An interactive explorer interface to inspect raw ESRF Data Format (EDF) files. Displays the 2D map and allows for selecting an individual spectrum.
 
-- **Features**:
   - Open any raw `.edf` binary file containing 2D MCA datasets.
-  - Scroll through incident energy slices and plot individual MCA spectra.
-  - Select regions of interest (ROI) and inspect raw detector counts.
+  - Select an individual energy slice and plot MCA spectra.
 - **Dependencies**: Leverages [`utils/data_loader.py`](utils/data_loader.py) for EDF binary parsing.
 - **Run**:
   ```bash
   python raw_edf_explorer.py
   ```
-
+... Or launch from an IDE.
 ---
 
 ### 2. ZAP Processor (`process_and_plot.py`)
-A PyQt5 GUI utility to batch load, align, normalize, and average raw ZAP scans (EDF format) and their SPEC metadata.
+A PyQt5 GUI utility to batch load, align, normalize, and average raw ZAP scans (EDF format) and their SPEC metadata. Accepts converted csv files from the BM28 scripts also.
 
 - **Features**:
-  - **Direct SPEC File Ingestion**: Select a SPEC file (`.01`, `.spec`, etc.) directly; scan metadata is parsed and converted in-memory without generating intermediate CSV files on disk. Backwards compatible with CSV directories.
-  - **Dynamic Range Selection**: Start and finish spin boxes to quickly select a range of scans for processing, plus Select All/Clear All overrides.
-  - **Robust Error Handling**: Automatically aligns EDF/SPEC row count mismatches by slicing to the minimum common length, and handles zero-division protection.
+  - **Dynamic Range Selection**: Start and finish spin boxes to quickly select a range of scans for processing, plus Select All/Clear All overrides. Select which scans to average if many samples or conditions are in the same directories.
   - **Auto-Averaging & Standard Deviation**: Computes average data and standard deviations (`ddof=1`).
-  - **Combined Package Output**: Saves all arrays into a single compressed NumPy container (`<basename>.npz`) alongside individual `.npy` files.
+  - **Combined Output**: Saves all arrays into a single compressed NumPy container (`<basename>.npz`) alongside individual `.npy` files. This contains an array for the averaged data, the error, and the calibration of the energy channels from the SPEC (CSV) file.
   - **Heatmap Generation**: Calibrates emission energies using IUPAC reference lines and saves the 2D average heatmap as `<basename>_heatmap.png`.
 - **Dependencies**: Leverages [`utils/data_loader.py`](utils/data_loader.py) for in-memory SPEC and EDF processing.
 - **Run**:
   ```bash
   python process_and_plot.py
   ```
-
+... Or launch from an IDE.
 ---
 
 ### 3. QuiXAFS (`QuiXAFS.py`)
-An interactive PyQt5 application for visualizing, calibrating, and performing multi-component fits of XAS/EXAFS datasets.
+An interactive PyQt5 application for visualizing, calibrating, and performing multi-component fits of XAS/EXAFS datasets. Uses emission lines obtain from xraydb (https://github.com/xraypy/XrayDB).
 
 - **Features**:
-  - **Dynamic File Format Support**: Loads standard 2D `.npy` files or single compressed `.npz` dataset packages containing average intensity, standard deviations, and energy axes.
   - **Example Data**: Includes an example NumPy dataset in [`example_data/`](example_data/) (`averaged_normalized_zap.npy` with `zap_energy_axis.npy`, `mca_energy_axis.npy`, and `standard_error_zap.npy`).
   - **Integrated ROI Integration Tool**: Draggable boundaries on the 1D spectrum plot to map specific emission lines.
   - **Element Selection**: Select from a periodic table which elements to include and model to compare against (elemental data pulled from IUPAC database).
   - **Emission Line Calibration**: Maps MCA channels to emission energy (eV) using IUPAC database lines.
-  - **Advanced Fitting**: Solves multi-component models (Tb, Co, Fe, Cr) with background scatter corrections.
+  - **Advanced Fitting**: Solves multi-component models (selected from periodic table) with background scatter corrections. By fitting gaussians to these emission lines, elemental "intensities" can be resolved within a ROI if elements overlap, helping to remove artifacts.
 - **Dependencies**: Loads atomic transition reference data from [`resources/emission_lines.json`](resources/emission_lines.json).
 - **Run**:
   ```bash
   python QuiXAFS.py
   ```
-
+... Or launch from an IDE.
 ---
 
 ## 📊 Example Dataset
