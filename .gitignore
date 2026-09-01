@@ -1,0 +1,23 @@
+﻿# Figures and Presentation Assets
+figures/
+figures/*
+
+# Python cache & build files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+build/
+dist/
+*.spec
+
+# Application runtime state and local defaults
+*_defaults.json
+app_defaults.json
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

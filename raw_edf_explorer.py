@@ -379,6 +379,7 @@ class RawEDFExplorerGUI(QMainWindow):
         self.btn_toggle_theme.setText("☀️ Light Mode" if self.theme == "charcoal" else "🌙 Dark Mode")
         
         # Re-style Matplotlib figures
+        self.mca_fig.set_facecolor(theme_cfg["fig_face"])
         self.mca_fig.patch.set_facecolor(theme_cfg["fig_face"])
         self.mca_ax.set_facecolor(theme_cfg["ax_face"])
         self.mca_ax.tick_params(colors=theme_cfg["text"], labelsize=13)
@@ -389,14 +390,15 @@ class RawEDFExplorerGUI(QMainWindow):
         for spine in self.mca_ax.spines.values():
             spine.set_color(theme_cfg["spine"])
             
+        self.heatmap_fig.set_facecolor(theme_cfg["fig_face"])
         self.heatmap_fig.patch.set_facecolor(theme_cfg["fig_face"])
         
         if self.data_2d is not None:
             self.plot_heatmap()
             self.plot_spectrum()
         else:
-            self.mca_canvas.draw()
-            self.heatmap_canvas.draw()
+            self.mca_canvas.draw_idle()
+            self.heatmap_canvas.draw_idle()
 
     def auto_load_files(self):
         target_dir = os.path.join(os.getcwd(), "example_data", "ZAP", "0223_P3")
@@ -452,6 +454,8 @@ class RawEDFExplorerGUI(QMainWindow):
             
         cfg = self.styles[self.theme]
         self.heatmap_fig.clear()
+        self.heatmap_fig.set_facecolor(cfg["fig_face"])
+        self.heatmap_fig.patch.set_facecolor(cfg["fig_face"])
         ax = self.heatmap_fig.add_subplot(111, facecolor=cfg["ax_face"])
         ax.tick_params(colors=cfg["text"], labelsize=9)
         
@@ -476,9 +480,8 @@ class RawEDFExplorerGUI(QMainWindow):
         for spine in ax.spines.values():
             spine.set_color(cfg["spine"])
             
-        self.heatmap_fig.patch.set_facecolor(cfg["fig_face"])
         self.heatmap_fig.tight_layout()
-        self.heatmap_canvas.draw()
+        self.heatmap_canvas.draw_idle()
 
     def plot_spectrum(self):
         if self.data_2d is None:

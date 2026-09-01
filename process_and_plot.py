@@ -108,8 +108,8 @@ class ProcessingWorker(QThread):
                     energy_fixed = energy[:min_points]
                     
                     # Avoid division by zero
-                    if np.any(iref_fixed == 0):
-                        iref_fixed = np.where(iref_fixed == 0, 1.0, iref_fixed)
+                    if np.any(iref_fixed <= 0):
+                        iref_fixed = np.where(iref_fixed <= 0, 1e-6, iref_fixed)
                         
                     # Normalize
                     normalized_data = edf_data / iref_fixed[:, np.newaxis]
@@ -142,12 +142,14 @@ class ProcessingWorker(QThread):
             normalized_array_3d = np.stack(normalized_scans_aligned, axis=0)
             energy_array_2d = np.stack(energy_arrays_aligned, axis=0)
             
-            # Averages and standard deviations
+            # Averages and standard errors
+            n_scans = len(normalized_scans_aligned)
             average_data = np.mean(normalized_array_3d, axis=0)
-            if len(normalized_scans_aligned) > 1:
-                std_dev = np.std(normalized_array_3d, axis=0, ddof=1)
+            if n_scans > 1:
+                # Standard Error of the Mean (SEM) = s / sqrt(N)
+                std_dev = np.std(normalized_array_3d, axis=0, ddof=1) / np.sqrt(n_scans)
             else:
-                self.log_signal.emit("Note: Only 1 scan processed; standard deviation set to zero.")
+                self.log_signal.emit("Note: Only 1 scan processed; standard error set to zero.")
                 std_dev = np.zeros_like(average_data)
                 
             average_energy = np.mean(energy_array_2d, axis=0)
@@ -219,6 +221,8 @@ class MplCanvas(FigureCanvas):
         self.axes.text(0.5, 0.5, "No data processed yet.\nSelect directories and click 'Process & Save' to plot.",
                        color='#a1a1aa', fontsize=12, ha='center', va='center', transform=self.axes.transAxes)
 
+
+class ZAPProcessingGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("BM28 XMaS - ZAP Data Processing")
@@ -739,12 +743,15 @@ class MplCanvas(FigureCanvas):
         for spine in self.canvas.axes.spines.values():
             spine.set_color(theme_cfg["spine"])
             
-        # Crop the emission energy to the region of interest (2000 eV to 8500 eV)
-        idx_crop = np.where((mca_energies >= 2000) & (mca_energies <= 8500))[0]
-        c_start, c_end = idx_crop[0], idx_crop[-1] + 1
-        
-        cropped_data = average_data[:, c_start:c_end]
-        cropped_mca_energies = mca_energies[c_start:c_end]
+        # Crop unphysical negative emission energies (mca_energies >= 0)
+        idx_crop = np.where(mca_energies >= 0)[0]
+        if len(idx_crop) > 0:
+            c_start, c_end = idx_crop[0], idx_crop[-1] + 1
+            cropped_data = average_data[:, c_start:c_end]
+            cropped_mca_energies = mca_energies[c_start:c_end]
+        else:
+            cropped_data = average_data
+            cropped_mca_energies = mca_energies
         
         energy_min = average_energy.min()
         energy_max = average_energy.max()
@@ -764,20 +771,6 @@ class MplCanvas(FigureCanvas):
                 pass
             self.colorbar = None
             
-        # Draw reference emission lines
-        ref_lines = {
-            r'Ar K-L3 (2958 eV)': 2958.0,
-            r'Tb L3-M5 (6275 eV)': 6275.0,
-            r'Co K-L3 (6930 eV)': 6930.0,
-            r'Co K-M3 (7649 eV)': 7649.0
-        }
-        
-        for label, val in ref_lines.items():
-            self.canvas.axes.axvline(val, color=theme_cfg["line_color"], linestyle='--', alpha=0.5, linewidth=1.2)
-            self.canvas.axes.text(val + 50, energy_max - 50, label, color=theme_cfg["text"], rotation=90, 
-                                 verticalalignment='top', fontsize=8, fontweight='bold',
-                                 bbox=dict(facecolor=theme_cfg["ax_face"], alpha=0.7, edgecolor='none', pad=2))
-            
         # Draw elastic diagonal line
         self.canvas.axes.plot([energy_min, energy_max], [energy_min, energy_max], color=theme_cfg["line_color"], linestyle='--', alpha=0.5, linewidth=1.2, label='Elastic Scatter (Diagonal)')
         
@@ -788,8 +781,8 @@ class MplCanvas(FigureCanvas):
         
         self.canvas.axes.set_xlabel('Emission Energy (eV)', fontsize=10)
         self.canvas.axes.set_ylabel('Incident Photon Energy (eV)', fontsize=10)
-        self.canvas.axes.set_title('2D Average ZAP Dataset - Energy-Calibrated Heatmap', color='#f4f4f5', fontsize=12, fontweight='bold')
-        self.canvas.axes.legend(loc='lower left', facecolor='#27272a', edgecolor='#3f3f46', labelcolor='#f4f4f5', fontsize=9)
+        self.canvas.axes.set_title('2D Average ZAP Dataset - Energy-Calibrated Heatmap', color=theme_cfg["text"], fontsize=12, fontweight='bold')
+        self.canvas.axes.legend(loc='lower left', facecolor=theme_cfg["fig_face"], edgecolor=theme_cfg["spine"], labelcolor=theme_cfg["text"], fontsize=9)
         
         self.canvas.figure.tight_layout()
         self.canvas.draw()

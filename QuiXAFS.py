@@ -210,7 +210,7 @@ def worker_residuals_dynamic(params, x, y, y_err, mu_inc, element_list, shapes_d
         res = np.concatenate([res, np.array(penalties)])
     return res
 
-def fit_slices_chunk_dynamic(s_indices, data_2d_chunk, energy_axis_chunk, mca_energy_axis, fit_min_kev, fit_max_kev, init_bg_params, w_peaks, tol, element_list, element_peaks_ints, edge_energies):
+def fit_slices_chunk_dynamic(s_indices, data_2d_chunk, energy_axis_chunk, mca_energy_axis, fit_min_kev, fit_max_kev, init_bg_params, w_peaks, tol, element_list, element_peaks_ints, edge_energies, std_err_chunk=None):
     import numpy as np
     from scipy.optimize import least_squares
     
@@ -227,6 +227,7 @@ def fit_slices_chunk_dynamic(s_indices, data_2d_chunk, energy_axis_chunk, mca_en
     x_fit = x_mca[fit_mask]
     
     chunk_fitted_profiles = {name: [] for name in element_list}
+    chunk_fitted_uncertainties = {name: [] for name in element_list}
     chunk_fitted_params = []
     
     bounds_min = [0.0] * n_elems + [0.0, mu_start - 0.1, -1.0, -0.1]
@@ -238,7 +239,21 @@ def fit_slices_chunk_dynamic(s_indices, data_2d_chunk, energy_axis_chunk, mca_en
         
         y_data = data_2d_chunk[idx] * 1e7
         y_fit = y_data[fit_mask]
-        y_fit_err = np.sqrt(np.maximum(y_fit, 1.0))
+        
+        # Calculate fit weights from experimental standard error if available
+        if std_err_chunk is not None:
+            try:
+                std_slice = std_err_chunk[idx][fit_mask] * 1e7
+                if np.all(std_slice <= 0) or np.isnan(std_slice).any():
+                    y_fit_err = np.sqrt(np.maximum(y_fit, 1.0))
+                else:
+                    pos_errs = std_slice[std_slice > 0]
+                    min_pos = np.min(pos_errs) if len(pos_errs) > 0 else 1.0
+                    y_fit_err = np.where(std_slice <= 0, min_pos, std_slice)
+            except Exception:
+                y_fit_err = np.sqrt(np.maximum(y_fit, 1.0))
+        else:
+            y_fit_err = np.sqrt(np.maximum(y_fit, 1.0))
         
         p_prev[n_elems + 1] = mu_inc
         bounds_min[n_elems + 1] = mu_inc - 0.1
@@ -272,20 +287,41 @@ def fit_slices_chunk_dynamic(s_indices, data_2d_chunk, energy_axis_chunk, mca_en
                         res.x[elem_idx] = 0.0
                 p_prev = list(res.x)
                 chunk_fitted_params.append(res.x)
+                
+                # Estimate parameter covariance from Jacobian
+                cov_diag = None
+                if res.jac is not None:
+                    try:
+                        J = res.jac
+                        inv_jtj = np.linalg.pinv(J.T @ J)
+                        dof = max(1, len(res.fun) - len(res.x))
+                        s_sq = 2.0 * res.cost / dof
+                        cov = inv_jtj * s_sq
+                        cov_diag = np.sqrt(np.maximum(0.0, np.diag(cov)))
+                    except Exception:
+                        cov_diag = None
+                
                 for elem_idx, name in enumerate(element_list):
                     chunk_fitted_profiles[name].append(res.x[elem_idx] / 1e7)
+                    if cov_diag is not None:
+                        chunk_fitted_uncertainties[name].append(cov_diag[elem_idx] / 1e7)
+                    else:
+                        chunk_fitted_uncertainties[name].append(0.0)
             else:
                 chunk_fitted_params.append(p_prev)
                 for name in element_list:
                     chunk_fitted_profiles[name].append(0.0)
+                    chunk_fitted_uncertainties[name].append(0.0)
         except Exception:
             chunk_fitted_params.append(p_prev)
             for name in element_list:
                 chunk_fitted_profiles[name].append(0.0)
+                chunk_fitted_uncertainties[name].append(0.0)
                 
     return {
         "s_indices": s_indices,
         "fitted_profiles": {name: np.array(vals) for name, vals in chunk_fitted_profiles.items()},
+        "fitted_uncertainties": {name: np.array(vals) for name, vals in chunk_fitted_uncertainties.items()},
         "fitted_params": np.array(chunk_fitted_params)
     }
 
@@ -293,7 +329,7 @@ class DynamicFitWorker(QThread):
     progress = pyqtSignal(int)
     finished = pyqtSignal(dict)
     
-    def __init__(self, data_2d, energy_axis, mca_energy_axis, element_list, element_peaks_ints, edge_energies, fit_min_kev=2.0, fit_max_kev=10.0, init_bg_params=None, w_peaks=0.08, tol=1e-6):
+    def __init__(self, data_2d, energy_axis, mca_energy_axis, element_list, element_peaks_ints, edge_energies, standard_error=None, fit_min_kev=2.0, fit_max_kev=10.0, init_bg_params=None, w_peaks=0.08, tol=1e-6):
         super().__init__()
         self.data_2d = data_2d
         self.energy_axis = energy_axis
@@ -301,6 +337,7 @@ class DynamicFitWorker(QThread):
         self.element_list = element_list
         self.element_peaks_ints = element_peaks_ints
         self.edge_energies = edge_energies
+        self.standard_error = standard_error
         self.fit_min_kev = fit_min_kev
         self.fit_max_kev = fit_max_kev
         self.init_bg_params = init_bg_params
@@ -322,11 +359,13 @@ class DynamicFitWorker(QThread):
         for chunk in chunks:
             data_chunk = self.data_2d[chunk]
             energy_chunk = self.energy_axis[chunk]
+            std_err_chunk = self.standard_error[chunk] if self.standard_error is not None else None
             res_obj = pool.apply_async(
                 fit_slices_chunk_dynamic,
                 args=(chunk, data_chunk, energy_chunk, self.mca_energy_axis,
                       self.fit_min_kev, self.fit_max_kev, self.init_bg_params,
-                      self.w_peaks, self.tol, self.element_list, self.element_peaks_ints, self.edge_energies)
+                      self.w_peaks, self.tol, self.element_list, self.element_peaks_ints, self.edge_energies,
+                      std_err_chunk)
             )
             results_objs.append((chunk, res_obj))
             
@@ -351,6 +390,7 @@ class DynamicFitWorker(QThread):
         pool.join()
         
         fitted_profiles = {name: np.zeros(n_slices) for name in self.element_list}
+        fitted_uncertainties = {name: np.zeros(n_slices) for name in self.element_list}
         fitted_params = np.zeros((n_slices, len(self.element_list) + 4))
         
         for chunk, res_obj in results_objs:
@@ -359,9 +399,12 @@ class DynamicFitWorker(QThread):
             fitted_params[s_indices] = res_dict["fitted_params"]
             for name in self.element_list:
                 fitted_profiles[name][s_indices] = res_dict["fitted_profiles"][name]
+                if "fitted_uncertainties" in res_dict and name in res_dict["fitted_uncertainties"]:
+                    fitted_uncertainties[name][s_indices] = res_dict["fitted_uncertainties"][name]
                 
         results = {
             "fitted_profiles": fitted_profiles,
+            "fitted_uncertainties": fitted_uncertainties,
             "fitted_params": fitted_params
         }
         self.finished.emit(results)
@@ -501,9 +544,14 @@ class XASExplorerGUI(QMainWindow):
         self.standard_error = None
         self.integrated_xas = None
         self.integrated_err = None
+        self.mca_err_band = None
+        self.xas_err_band = None
+        self.fit_mca_err_band = None
+        self.fit_xas_err_band = None
         
         # Fitting variables
         self.fitted_profiles = {}
+        self.fitted_uncertainties = {}
         self.fitted_params = None
         self.fit_worker = None
         
@@ -646,7 +694,7 @@ class XASExplorerGUI(QMainWindow):
         self.lbl_file_path.setWordWrap(True)
         
         btn_layout = QHBoxLayout()
-        btn_load = QPushButton("Load 2D NumPy")
+        btn_load = QPushButton("Load 2D NumPy .npz")
         btn_load.setObjectName("btn_accent")
         btn_load.clicked.connect(self.on_load_clicked)
         btn_layout.addWidget(btn_load)
@@ -1368,7 +1416,14 @@ class XASExplorerGUI(QMainWindow):
                     self.energy_axis = dataset['energy_in']
                     self.mca_energy_axis = dataset['energy_out']
                     if 'std_dev' in dataset:
-                        self.standard_error = dataset['std_dev']
+                        try:
+                            std_arr = dataset['std_dev']
+                            if std_arr is not None and not np.all(std_arr == 0) and not np.isnan(std_arr).all():
+                                self.standard_error = std_arr
+                            else:
+                                self.standard_error = None
+                        except Exception:
+                            self.standard_error = None
                     else:
                         self.standard_error = None
                 self.lbl_file_path.setText(f"Dataset: {os.path.basename(file_path)}")
@@ -1399,11 +1454,22 @@ class XASExplorerGUI(QMainWindow):
                 else:
                     self.mca_energy_axis = self.gain * np.arange(self.data_2d.shape[1]) + self.offset
                     
-                if os.path.exists(err_path):
-                    self.standard_error = np.load(err_path)
-                else:
+                try:
+                    if os.path.exists(err_path):
+                        std_arr = np.load(err_path)
+                        if std_arr is not None and not np.all(std_arr == 0) and not np.isnan(std_arr).all():
+                            self.standard_error = std_arr
+                        else:
+                            self.standard_error = None
+                    else:
+                        self.standard_error = None
+                except Exception:
                     self.standard_error = None
                 
+            self.fitted_profiles = {}
+            self.fitted_uncertainties = {}
+            self.fitted_params = None
+            
             num_points = len(self.energy_axis)
             self.slider_energy.setRange(0, num_points - 1)
             self.spin_energy.setRange(float(self.energy_axis.min()), float(self.energy_axis.max()))
@@ -1465,7 +1531,14 @@ class XASExplorerGUI(QMainWindow):
         start_idx, end_idx = idx_crop[0], idx_crop[-1] + 1
         self.integrated_xas = np.sum(self.data_2d[:, start_idx:end_idx], axis=1)
         if self.standard_error is not None:
-            self.integrated_err = np.sqrt(np.sum(self.standard_error[:, start_idx:end_idx]**2, axis=1))
+            try:
+                err_int = np.sqrt(np.sum(self.standard_error[:, start_idx:end_idx]**2, axis=1))
+                if not np.all(err_int == 0) and not np.isnan(err_int).all():
+                    self.integrated_err = err_int
+                else:
+                    self.integrated_err = None
+            except Exception:
+                self.integrated_err = None
         else:
             self.integrated_err = None
 
@@ -1475,6 +1548,8 @@ class XASExplorerGUI(QMainWindow):
             
         cfg = self.styles[self.theme]
         self.heatmap_fig.clear()
+        self.heatmap_fig.set_facecolor(cfg["fig_face"])
+        self.heatmap_fig.patch.set_facecolor(cfg["fig_face"])
         ax = self.heatmap_fig.add_subplot(111, facecolor=cfg["ax_face"])
         ax.tick_params(colors=cfg["text"], labelsize=10)
         
@@ -1504,6 +1579,9 @@ class XASExplorerGUI(QMainWindow):
         ax.set_ylabel('Incident Energy (eV)', color=cfg["text"], fontsize=13, fontweight='bold')
         ax.set_title('2D MCA Emission Heatmap (Log10)', color=cfg["text"], fontsize=14, fontweight='bold')
         
+        for spine in ax.spines.values():
+            spine.set_color(cfg["spine"])
+        
         # Preserve viewport limits
         ax.set_xlim(cropped_mca_energies[0], cropped_mca_energies[-1])
         ax.set_ylim(energy_min, energy_max)
@@ -1520,6 +1598,25 @@ class XASExplorerGUI(QMainWindow):
         self.spectrum_line.set_data(self.mca_energy_axis, spectrum)
         self.incident_line.set_xdata([e_inc, e_inc])
         self.incident_line.set_label(f'Incident Energy ({e_inc:.1f} eV)')
+        
+        # Remove previous error band if present
+        if hasattr(self, 'mca_err_band') and self.mca_err_band is not None:
+            try: self.mca_err_band.remove()
+            except Exception: pass
+            self.mca_err_band = None
+
+        if self.standard_error is not None:
+            try:
+                err_mca = self.standard_error[self.current_idx]
+                if not np.all(err_mca == 0):
+                    y_lower = np.maximum(1e-6 if self.use_log_scale_1d else 0.0, spectrum - err_mca)
+                    y_upper = spectrum + err_mca
+                    self.mca_err_band = self.mca_ax.fill_between(
+                        self.mca_energy_axis, y_lower, y_upper,
+                        color='#6366f1', alpha=0.20, label='±1σ Error Band'
+                    )
+            except Exception:
+                self.mca_err_band = None
         
         self.roi_start_line.set_xdata([self.roi_start, self.roi_start])
         self.roi_end_line.set_xdata([self.roi_end, self.roi_end])
@@ -1613,6 +1710,24 @@ class XASExplorerGUI(QMainWindow):
         self.xas_line.set_data(self.energy_axis, self.integrated_xas)
         e_inc = self.energy_axis[self.current_idx]
         self.xas_slice_line.set_xdata([e_inc, e_inc])
+        
+        # Remove previous error band if present
+        if hasattr(self, 'xas_err_band') and self.xas_err_band is not None:
+            try: self.xas_err_band.remove()
+            except Exception: pass
+            self.xas_err_band = None
+
+        if self.integrated_err is not None:
+            try:
+                if not np.all(self.integrated_err == 0):
+                    self.xas_err_band = self.xas_ax.fill_between(
+                        self.energy_axis,
+                        self.integrated_xas - self.integrated_err,
+                        self.integrated_xas + self.integrated_err,
+                        color='#6366f1', alpha=0.25, label='±1σ Integrated Error'
+                    )
+            except Exception:
+                self.xas_err_band = None
         
         self.xas_ax.relim()
         self.xas_ax.autoscale_view(scalex=False, scaley=True)
@@ -1871,6 +1986,7 @@ class XASExplorerGUI(QMainWindow):
         self.fit_worker = DynamicFitWorker(
             self.data_2d, self.energy_axis, self.mca_energy_axis,
             self.active_elements, self.element_peaks_ints, self.element_edges,
+            standard_error=self.standard_error,
             fit_min_kev=self.fit_spin_range_min.value(), fit_max_kev=self.fit_spin_range_max.value(),
             init_bg_params=init_bg_params, w_peaks=self.w_peaks, tol=1e-6
         )
@@ -1885,6 +2001,7 @@ class XASExplorerGUI(QMainWindow):
             return
             
         self.fitted_profiles = results["fitted_profiles"]
+        self.fitted_uncertainties = results.get("fitted_uncertainties", {})
         self.fitted_params = results["fitted_params"]
         self.fit_lbl_status.setText("Status: Batch Fit Complete")
         
@@ -1902,6 +2019,26 @@ class XASExplorerGUI(QMainWindow):
         xas_profile = self.fitted_profiles[element]
         self.fit_xas_line.set_data(self.energy_axis, xas_profile * 1e7)
         self.fit_xas_slice_line.set_xdata([self.energy_axis[self.current_idx], self.energy_axis[self.current_idx]])
+        
+        # Remove previous fit XAS uncertainty band if present
+        if hasattr(self, 'fit_xas_err_band') and self.fit_xas_err_band is not None:
+            try: self.fit_xas_err_band.remove()
+            except Exception: pass
+            self.fit_xas_err_band = None
+
+        if hasattr(self, 'fitted_uncertainties') and element in self.fitted_uncertainties:
+            try:
+                err_profile = self.fitted_uncertainties[element] * 1e7
+                if not np.all(err_profile == 0):
+                    y_prof = xas_profile * 1e7
+                    self.fit_xas_err_band = self.fit_xas_ax.fill_between(
+                        self.energy_axis,
+                        np.maximum(0.0, y_prof - err_profile),
+                        y_prof + err_profile,
+                        color='#6366f1', alpha=0.25, label='±1σ Fit Uncertainty'
+                    )
+            except Exception:
+                self.fit_xas_err_band = None
         
         e0 = self.fit_spin_e0.value()
         kmin = self.fit_spin_k_min.value()
@@ -1921,35 +2058,33 @@ class XASExplorerGUI(QMainWindow):
             # Recalculate EXAFS intensity with standard pre-edge & post-edge background subtraction
             if hasattr(self, 'fit_chk_subtract_bg') and self.fit_chk_subtract_bg.isChecked() and len(self.energy_axis) > 10:
                 # 1. Fit pre-edge
-                pre_mask = self.energy_axis < (e0 - 30.0)
+                pre_mask = e_arr < (e0 - 30.0)
                 if np.sum(pre_mask) < 3:
-                    sorted_energies = np.sort(self.energy_axis)
-                    threshold = sorted_energies[int(len(sorted_energies) * 0.15)]
-                    pre_mask = self.energy_axis <= threshold
+                    threshold = e_arr[int(len(e_arr) * 0.15)]
+                    pre_mask = e_arr <= threshold
                 
-                e_pre = self.energy_axis[pre_mask]
-                i_pre = (xas_profile * 1e7)[pre_mask]
+                e_pre = e_arr[pre_mask]
+                i_pre = i_arr[pre_mask]
                 
                 if len(e_pre) > 1:
                     pre_poly = np.polyfit(e_pre, i_pre, 1)
                 else:
-                    pre_poly = [0.0, np.mean((xas_profile * 1e7)[:3])]
+                    pre_poly = [0.0, np.mean(i_arr[:3])]
                     
-                xas_baseline_sub = (xas_profile * 1e7) - np.polyval(pre_poly, self.energy_axis)
-                i_sel_sub = xas_baseline_sub[mask][sort_idx]
+                xas_baseline_sub = i_arr - np.polyval(pre_poly, e_arr)
+                i_sel_sub = xas_baseline_sub[mask]
                 
                 edge_jump = np.polyval(pre_poly, e0)
                 if edge_jump <= 0.0:
                     edge_jump = 1.0
                 
                 # 2. Fit post-edge
-                post_mask = self.energy_axis > (e0 + 50.0)
+                post_mask = e_arr > (e0 + 50.0)
                 if np.sum(post_mask) < 3:
-                    sorted_energies = np.sort(self.energy_axis)
-                    threshold = sorted_energies[int(len(sorted_energies) * 0.80)]
-                    post_mask = self.energy_axis >= threshold
+                    threshold = e_arr[int(len(e_arr) * 0.80)]
+                    post_mask = e_arr >= threshold
                     
-                e_post = self.energy_axis[post_mask]
+                e_post = e_arr[post_mask]
                 i_post = xas_baseline_sub[post_mask]
                 
                 if len(e_post) > 3:
@@ -2001,6 +2136,25 @@ class XASExplorerGUI(QMainWindow):
         mu_inc = e_inc / 1000.0
         
         self.fit_mca_raw_line.set_data(self.mca_energy_axis, y_data)
+        
+        # Remove previous slice error band if present
+        if hasattr(self, 'fit_mca_err_band') and self.fit_mca_err_band is not None:
+            try: self.fit_mca_err_band.remove()
+            except Exception: pass
+            self.fit_mca_err_band = None
+
+        if self.standard_error is not None:
+            try:
+                err_slice = self.standard_error[self.current_idx] * 1e7
+                if not np.all(err_slice == 0):
+                    self.fit_mca_err_band = self.fit_mca_ax.fill_between(
+                        self.mca_energy_axis,
+                        np.maximum(0.0, y_data - err_slice),
+                        y_data + err_slice,
+                        color='#a1a1aa', alpha=0.20, label='±1σ Data Error'
+                    )
+            except Exception:
+                self.fit_mca_err_band = None
         
         # Calculate fit curve model on-the-fly
         if self.fitted_params is not None:
@@ -2112,6 +2266,24 @@ class XASExplorerGUI(QMainWindow):
         # 3. EXAFS chi calculation
         chi = (i_sel_sub - i_bg_sub) / edge_jump
         
+        # Determine source error array for k-space error propagation
+        err_arr = None
+        if "Peak-Fitted" in source:
+            if hasattr(self, 'fitted_uncertainties') and element in self.fitted_uncertainties:
+                err_arr = self.fitted_uncertainties[element][sort_idx] * 1e7
+        else:
+            if self.integrated_err is not None and len(self.integrated_err) == len(self.energy_axis):
+                err_arr = self.integrated_err[sort_idx]
+                
+        err_k_pts = None
+        if err_arr is not None:
+            try:
+                err_exafs = err_arr[mask]
+                err_chi = err_exafs / edge_jump
+                err_k_pts = err_chi * (k_arr ** kweight)
+            except Exception:
+                err_k_pts = None
+        
         kmin_clamped = max(kmin, k_arr.min())
         kmax_clamped = min(kmax, k_arr.max())
         k_grid = np.arange(kmin_clamped, kmax_clamped + 1e-9, k_step)
@@ -2174,6 +2346,16 @@ class XASExplorerGUI(QMainWindow):
         self.ft_r_ax.clear()
         
         cfg = self.styles[self.theme]
+        if err_k_pts is not None and not np.all(err_k_pts == 0) and not np.isnan(err_k_pts).any():
+            try:
+                self.ft_k_ax.fill_between(
+                    k_arr,
+                    (chi * (k_arr ** kweight)) - err_k_pts,
+                    (chi * (k_arr ** kweight)) + err_k_pts,
+                    color='#6366f1', alpha=0.20, label='±1σ Error Band'
+                )
+            except Exception:
+                pass
         self.ft_k_ax.plot(k_arr, chi * (k_arr ** kweight), '.', color='#a1a1aa', markersize=3.5, label='Raw Data Points')
         self.ft_k_ax.plot(k_grid, weighted_chi, color='#6366f1', linewidth=1.5, label=f'Interpolated Grid (k^{kweight})')
         self.ft_k_ax.plot(k_grid, window * np.max(np.abs(weighted_chi)), color='#ef4444', linestyle='--', alpha=0.7, label='Taper Window')
@@ -2373,13 +2555,10 @@ class XASExplorerGUI(QMainWindow):
         cfg = self.styles[self.theme]
         self.setStyleSheet(cfg["qss"])
         self.btn_toggle_theme.setText("☀️ Light Mode" if self.theme == "charcoal" else "🌙 Dark Mode")
-        self.mca_fig.patch.set_facecolor(cfg["fig_face"])
-        self.xas_fig.patch.set_facecolor(cfg["fig_face"])
-        self.k_fig.patch.set_facecolor(cfg["fig_face"])
-        self.fit_k_fig.patch.set_facecolor(cfg["fig_face"])
-        self.fit_xas_fig.patch.set_facecolor(cfg["fig_face"])
-        self.fit_mca_fig.patch.set_facecolor(cfg["fig_face"])
-        self.ft_fig.patch.set_facecolor(cfg["fig_face"])
+        
+        for fig in [self.heatmap_fig, self.mca_fig, self.xas_fig, self.k_fig, self.fit_k_fig, self.fit_xas_fig, self.fit_mca_fig, self.ft_fig]:
+            fig.set_facecolor(cfg["fig_face"])
+            fig.patch.set_facecolor(cfg["fig_face"])
         
         for ax in [self.mca_ax, self.xas_ax, self.k_ax, self.fit_k_ax, self.fit_xas_ax, self.fit_mca_ax, self.ft_k_ax, self.ft_r_ax]:
             ax.set_facecolor(cfg["ax_face"])
@@ -2410,6 +2589,8 @@ class XASExplorerGUI(QMainWindow):
         self.ft_canvas.draw_idle()
         if self.data_2d is not None:
             self.plot_heatmap()
+        else:
+            self.heatmap_canvas.draw_idle()
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
